@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { 
   LogOut, Wallet, ArrowUpCircle, ArrowDownCircle, 
   PlusCircle, Pencil, Trash2, XCircle, Tag,
-  ChevronLeft, ChevronRight, FileText, AlertTriangle, CreditCard
+  ChevronLeft, ChevronRight, FileText, AlertTriangle, CreditCard, FolderOpen
 } from 'lucide-react';
 
 export default function App() {
@@ -22,13 +22,13 @@ export default function App() {
 
   // --- ESTADOS DOS MODAIS ---
   const [isModalAberto, setIsModalAberto] = useState(false);
-  const [idExclusaoConfirmar, setIdExclusaoConfirmar] = useState(null); // Estado para controlar o modal de exclusão
+  const [idExclusaoConfirmar, setIdExclusaoConfirmar] = useState(null); 
 
   // --- ESTADOS DOS FILTROS ---
   const [buscaTexto, setBuscaTexto] = useState('');
   const [filtroMes, setFiltroMes] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState(''); 
-  const [filtroStatus, setFiltroStatus] = useState('');       
+  const [filtroStatus, setFiltroStatus] = useState('');      
 
   // --- ESTADO DA PAGINAÇÃO ---
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -36,13 +36,33 @@ export default function App() {
 
   // --- ESTADOS DO FORMULÁRIO ---
   const [descricao, setDescricao] = useState('');
-  const [valor, setValor] = useState('');
+  
+  // UX: Mantemos o estado do input como String para controlar a máscara visual do R$
+  const [valorMascara, setValorMascara] = useState('');
+  
   const [categoria, setCategoria] = useState('');
   const [tipo, setTipo] = useState('Saída');
   const [status, setStatus] = useState('Pago');
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
   const [dataVencimento, setDataVencimento] = useState('');
   const [dadosPagamento, setDadosPagamento] = useState('');
+
+  // UX: Função de Máscara de Moeda (BRL) em Tempo Real
+  const lidarComMudancaValor = (e) => {
+    let valorLimpo = e.target.value.replace(/\D/g, ''); // Remove tudo que não for número
+    if (!valorLimpo) {
+      setValorMascara('');
+      return;
+    }
+    const valorNumerico = Number(valorLimpo) / 100;
+    setValorMascara(valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  };
+
+  // UX: Transforma a string "R$ 1.250,50" de volta em Float válido para o Supabase
+  const converterMascaraParaFloat = (stringBRL) => {
+    if (!stringBRL) return 0;
+    return Number(stringBRL.replace(/\D/g, '')) / 100;
+  };
 
   // Monitoramento da sessão activa
   useEffect(() => {
@@ -63,13 +83,14 @@ export default function App() {
     }
   }, [session]);
 
-  // Busca de transações no banco de dados
+  // Busca de transações no banco de dados filtrando pelo usuário logado
   async function buscarTransacoes() {
     try {
       setCarregando(true);
       const { data: dados, error } = await supabase
         .from('transacoes')
         .select('*')
+        .eq('user_id', session.user.id) 
         .order('data', { ascending: false });
 
       if (error) throw error;
@@ -102,8 +123,12 @@ export default function App() {
   // Criação ou Atualização de registros
   async function salvarLancamento(e) {
     e.preventDefault();
-    if (!descricao || !valor || !categoria) {
-      toast.error('Por favor, preencha os campos obrigatórios.');
+    
+    // Convertemos o valor mascarado visual para o float matemático que vai pro banco
+    const valorFloat = converterMascaraParaFloat(valorMascara);
+
+    if (!descricao || valorFloat <= 0 || !categoria) {
+      toast.error('Por favor, preencha os campos obrigatórios com valores válidos.');
       return;
     }
 
@@ -111,11 +136,12 @@ export default function App() {
       data, 
       descricao, 
       categoria: categoria.trim(), 
-      valor: parseFloat(valor), 
+      valor: valorFloat, 
       tipo, 
       status,
       data_vencimento: dataVencimento || null,
-      dados_pagamento: dadosPagamento || null
+      dados_pagamento: dadosGamamento => dadosPagamento || null,
+      user_id: session.user.id 
     };
 
     if (editandoId) {
@@ -147,7 +173,7 @@ export default function App() {
   }
 
   // Execução real da exclusão no Banco de Dados
-  async function executarExclusao() {
+  async function ejecutarExclusao() {
     if (!idExclusaoConfirmar) return;
 
     try {
@@ -160,7 +186,7 @@ export default function App() {
     } catch (error) {
       toast.error('Não foi possível excluir o registro.');
     } finally {
-      setIdExclusaoConfirmar(null); // Fecha o modal limpando o ID
+      setIdExclusaoConfirmar(null); 
     }
   }
 
@@ -168,7 +194,10 @@ export default function App() {
     setEditandoId(t.id);
     setData(t.data);
     setDescricao(t.descricao);
-    setValor(t.valor.toString());
+    
+    // Carrega o valor convertendo o número do banco direto para o formato de máscara
+    setValorMascara(t.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+    
     setCategoria(t.categoria);
     setTipo(t.tipo);
     setStatus(t.status);
@@ -181,7 +210,7 @@ export default function App() {
   function limparFormulario() {
     setEditandoId(null);
     setDescricao('');
-    setValor('');
+    setValorMascara('');
     setCategoria('');
     setData(new Date().toISOString().split('T')[0]);
     setTipo('Saída');
@@ -279,7 +308,7 @@ export default function App() {
 
     autoTable(doc, {
       head: [colunas],
-      body: linhas,
+      body: lines => linhas,
       startY: 80,
       theme: 'striped',
       headStyles: { fillColor: [59, 130, 246], fontStyle: 'bold' },
@@ -385,7 +414,7 @@ export default function App() {
           </select>
         </section>
 
-        {/* TABELA DE LANÇAMENTOS */}
+        {/* TABELA DE LANÇAMENTOS OU EMPTY STATE */}
         <section className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm w-full">
           <div className="p-4 border-b border-gray-100 flex justify-between items-center gap-2">
             <h2 className="font-bold text-xs md:text-sm">Histórico de Lançamentos</h2>
@@ -399,76 +428,96 @@ export default function App() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="bg-neutral-50 text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-gray-100">
-                  <th className="p-3.5">Data Lanc. / Venc.</th>
-                  <th className="p-3.5">Descrição / Informações</th>
-                  <th className="p-3.5">Valor</th>
-                  <th className="p-3.5 text-center">Status / Alerta</th>
-                  <th className="p-3.5 text-center">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
-                {transacoesPaginadas.map((t) => {
-                  const alertaVencimento = verificarStatusVencimento(t.data_vencimento, t.status);
-                  return (
-                    <tr key={t.id} className="hover:bg-neutral-50/50 transition-colors">
-                      <td className="p-3.5 whitespace-nowrap text-neutral-500">
-                        <div className="font-bold text-xs text-neutral-700">{new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}</div>
-                        {t.data_vencimento && <div className="text-xs font-semibold text-neutral-400 mt-0.5">Validade: {new Date(t.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</div>}
-                      </td>
-                      <td className="p-3.5">
-                        <div className="font-semibold text-neutral-900 text-sm">{t.descricao}</div>
-                        <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] text-neutral-500">
-                          <span className="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-md font-medium">
-                            <Tag className="w-3 h-3 text-neutral-400" /> {t.categoria}
-                          </span>
-                          {t.dados_pagamento && (
-                            <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100">
-                              <CreditCard className="w-3 h-3 text-blue-400" /> {t.dados_pagamento}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={`p-3.5 font-bold whitespace-nowrap text-sm ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-500'}`}>
-                        {t.tipo === 'Entrada' ? '+ ' : '- '}R$ {t.valor.toFixed(2)}
-                      </td>
-                      <td className="p-3.5 text-center whitespace-nowrap space-y-1">
-                        <div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${t.status === 'Pago' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}>{t.status}</span>
-                        </div>
-                        {alertaVencimento && (
-                          <div className="flex justify-center">
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold border flex items-center gap-0.5 ${alertaVencimento.cor}`}>
-                              <AlertTriangle className="w-2.5 h-2.5" /> {alertaVencimento.rotulo}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3.5 text-center">
-                        <div className="flex justify-center gap-1.5">
-                          <button onClick={() => prepararEdicao(t)} className="p-1.5 bg-neutral-50 rounded-lg border border-gray-200 hover:bg-neutral-100 text-neutral-500 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                          {/* Modificado para acionar o modal customizado de exclusão */}
-                          <button onClick={() => setIdExclusaoConfirmar(t.id)} className="p-1.5 bg-neutral-50 rounded-lg border border-gray-200 hover:bg-neutral-100 text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* CONTROLO DE PAGINAÇÃO */}
-          <div className="p-3 bg-neutral-50 border-t border-gray-100 flex items-center justify-between text-neutral-500 text-xs">
-            <span>Página <b>{paginaAtual}</b> de {totalPaginas}</span>
-            <div className="flex items-center gap-1">
-              <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} className="p-1 border border-gray-200 bg-white rounded-lg disabled:opacity-40 hover:bg-neutral-50"><ChevronLeft className="w-3.5 h-3.5" /></button>
-              <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} className="p-1 border border-gray-200 bg-white rounded-lg disabled:opacity-40 hover:bg-neutral-50"><ChevronRight className="w-3.5 h-3.5" /></button>
+          {/* UX: Tratamento de Estado Vazio (Empty State) com Tailwind */}
+          {transacoesPaginadas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center bg-white">
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-gray-100 mb-3 text-neutral-400">
+                <FolderOpen className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-bold text-neutral-700">Nenhum lançamento por aqui</h3>
+              <p className="text-xs text-neutral-400 mt-1 max-w-sm font-medium leading-relaxed">
+                Não encontramos transações cadastradas ou correspondentes aos filtros ativos. Que tal registrar sua primeira movimentação?
+              </p>
+              <button 
+                onClick={() => setIsModalAberto(true)} 
+                className="mt-4 flex items-center gap-1 bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors shadow-sm active:scale-95"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> Cadastrar primeira transação
+              </button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-neutral-50 text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-gray-100">
+                      <th className="p-3.5">Data Lanc. / Venc.</th>
+                      <th className="p-3.5">Descrição / Informações</th>
+                      <th className="p-3.5">Valor</th>
+                      <th className="p-3.5 text-center">Status / Alerta</th>
+                      <th className="p-3.5 text-center">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs">
+                    {transacoesPaginadas.map((t) => {
+                      const alertaVencimento = verificarStatusVencimento(t.data_vencimento, t.status);
+                      return (
+                        <tr key={t.id} className="hover:bg-neutral-50/50 transition-colors">
+                          <td className="p-3.5 whitespace-nowrap text-neutral-500">
+                            <div className="font-bold text-xs text-neutral-700">{new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}</div>
+                            {t.data_vencimento && <div className="text-xs font-semibold text-neutral-400 mt-0.5">Validade: {new Date(t.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</div>}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-semibold text-neutral-900 text-sm">{t.descricao}</div>
+                            <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] text-neutral-500">
+                              <span className="flex items-center gap-1 bg-neutral-100 px-2 py-0.5 rounded-md font-medium">
+                                <Tag className="w-3 h-3 text-neutral-400" /> {t.categoria}
+                              </span>
+                              {t.dados_pagamento && (
+                                <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-medium border border-blue-100">
+                                  <CreditCard className="w-3 h-3 text-blue-400" /> {t.dados_pagamento}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className={`p-3.5 font-bold whitespace-nowrap text-sm ${t.tipo === 'Entrada' ? 'text-green-600' : 'text-red-500'}`}>
+                            {t.tipo === 'Entrada' ? '+ ' : '- '}R$ {t.valor.toFixed(2)}
+                          </td>
+                          <td className="p-3.5 text-center whitespace-nowrap space-y-1">
+                            <div>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${t.status === 'Pago' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-orange-50 text-orange-500 border-orange-200'}`}>{t.status}</span>
+                            </div>
+                            {alertaVencimento && (
+                              <div className="flex justify-center">
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold border flex items-center gap-0.5 ${alertaVencimento.cor}`}>
+                                  <AlertTriangle className="w-2.5 h-2.5" /> {alertaVencimento.rotulo}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3.5 text-center">
+                            <div className="flex justify-center gap-1.5">
+                              <button onClick={() => prepararEdicao(t)} className="p-1.5 bg-neutral-50 rounded-lg border border-gray-200 hover:bg-neutral-100 text-neutral-500 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setIdExclusaoConfirmar(t.id)} className="p-1.5 bg-neutral-50 rounded-lg border border-gray-200 hover:bg-neutral-100 text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* CONTROLO DE PAGINAÇÃO */}
+              <div className="p-3 bg-neutral-50 border-t border-gray-100 flex items-center justify-between text-neutral-500 text-xs">
+                <span>Página <b>{paginaAtual}</b> de {totalPaginas}</span>
+                <div className="flex items-center gap-1">
+                  <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)} className="p-1 border border-gray-200 bg-white rounded-lg disabled:opacity-40 hover:bg-neutral-50"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                  <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)} className="p-1 border border-gray-200 bg-white rounded-lg disabled:opacity-40 hover:bg-neutral-50"><ChevronRight className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         {/* MODAL PARA ADICIONAR / EDITAR LANÇAMENTO */}
@@ -508,9 +557,17 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
+                  {/* UX: Input de valor alterado para type="text" suportando a máscara em tempo real */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Valor (R$)</label>
-                    <input type="number" step="0.01" required placeholder="0.00" className="w-full bg-neutral-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-neutral-700 font-semibold" value={valor} onChange={(e) => setValor(e.target.value)} />
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Valor</label>
+                    <input 
+                      type="text" 
+                      required 
+                      placeholder="R$ 0,00" 
+                      className="w-full bg-neutral-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-neutral-700 font-semibold" 
+                      value={valorMascara} 
+                      onChange={lidarComMudancaValor} 
+                    />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Categoria</label>
@@ -569,7 +626,7 @@ export default function App() {
                 </button>
                 <button 
                   type="button" 
-                  onClick={executarExclusao} 
+                  onClick={ejecutarExclusao} 
                   className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-semibold transition-all shadow-sm w-full active:scale-[0.99]"
                 >
                   Excluir
