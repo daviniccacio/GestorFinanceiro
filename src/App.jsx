@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { 
   LogOut, Wallet, ArrowUpCircle, ArrowDownCircle, 
   PlusCircle, Pencil, Trash2, XCircle, Tag,
-  ChevronLeft, ChevronRight, FileText, AlertTriangle, CreditCard, FolderOpen
+  ChevronLeft, ChevronRight, FileText, AlertTriangle, CreditCard, FolderOpen, Calendar
 } from 'lucide-react';
 
 export default function App() {
@@ -26,9 +26,17 @@ export default function App() {
 
   // --- ESTADOS DOS FILTROS ---
   const [buscaTexto, setBuscaTexto] = useState('');
-  const [filtroMes, setFiltroMes] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState(''); 
   const [filtroStatus, setFiltroStatus] = useState('');      
+
+  // --- CONTROLE DE COMPETÊNCIA AUTOMATIZADO ---
+  // Inicia automaticamente no ano-mês atual (Ex: "2026-07")
+  const [filtroCompetencia, setFiltroCompetencia] = useState(() => {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+    return `${ano}-${mes}`;
+  });
 
   // --- ESTADO DA PAGINAÇÃO ---
   const [paginaAtual, setPaginaAtual] = useState(1);
@@ -36,10 +44,7 @@ export default function App() {
 
   // --- ESTADOS DO FORMULÁRIO ---
   const [descricao, setDescricao] = useState('');
-  
-  // UX: Mantemos o estado do input como String para controlar a máscara visual do R$
   const [valorMascara, setValorMascara] = useState('');
-  
   const [categoria, setCategoria] = useState('');
   const [tipo, setTipo] = useState('Saída');
   const [status, setStatus] = useState('Pago');
@@ -47,9 +52,36 @@ export default function App() {
   const [dataVencimento, setDataVencimento] = useState('');
   const [dadosPagamento, setDadosPagamento] = useState('');
 
-  // UX: Função de Máscara de Moeda (BRL) em Tempo Real
+  // Funções Auxiliares do Controle de Competência
+  function alterarCompetencia(offset) {
+    if (!filtroCompetencia) {
+      // Se estava no histórico completo, volta para o mês atual antes de navegar
+      const hoje = new Date();
+      setFiltroCompetencia(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`);
+      return;
+    }
+    const [ano, mes] = filtroCompetencia.split('-').map(Number);
+    const novaData = new Date(ano, mes - 1 + offset, 1);
+    const novoAno = novaData.getFullYear();
+    const novoMes = String(novaData.getMonth() + 1).padStart(2, '0');
+    
+    setFiltroCompetencia(`${novoAno}-${novoMes}`);
+    setPaginaAtual(1);
+  }
+
+  function formatarCompetenciaTexto(compString) {
+    if (!compString) return "Histórico Completo";
+    const [ano, mes] = compString.split('-');
+    const meses = [
+      "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+    return `${meses[Number(mes) - 1]} de ${ano}`;
+  }
+
+  // Máscara de Moeda (BRL)
   const lidarComMudancaValor = (e) => {
-    let valorLimpo = e.target.value.replace(/\D/g, ''); // Remove tudo que não for número
+    let valorLimpo = e.target.value.replace(/\D/g, '');
     if (!valorLimpo) {
       setValorMascara('');
       return;
@@ -58,13 +90,12 @@ export default function App() {
     setValorMascara(valorNumerico.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
   };
 
-  // UX: Transforma a string "R$ 1.250,50" de volta em Float válido para o Supabase
   const converterMascaraParaFloat = (stringBRL) => {
     if (!stringBRL) return 0;
     return Number(stringBRL.replace(/\D/g, '')) / 100;
   };
 
-  // Monitoramento da sessão activa
+  // Monitoramento da sessão ativa
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -83,7 +114,6 @@ export default function App() {
     }
   }, [session]);
 
-  // Busca de transações no banco de dados filtrando pelo usuário logado
   async function buscarTransacoes() {
     try {
       setCarregando(true);
@@ -103,7 +133,6 @@ export default function App() {
     }
   }
 
-  // Ações de Login e Logout
   async function lidarComLogin(e) {
     e.preventDefault();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -120,15 +149,12 @@ export default function App() {
     toast.success('Sessão encerrada.');
   }
 
-  // Criação ou Atualização de registros
   async function salvarLancamento(e) {
     e.preventDefault();
-    
-    // Convertemos o valor mascarado visual para o float matemático que vai pro banco
     const valorFloat = converterMascaraParaFloat(valorMascara);
 
     if (!descricao || valorFloat <= 0 || !categoria) {
-      toast.error('Por favor, preencha os campos obrigatórios com valores válidos.');
+      toast.error('Por favor, preencha os campos obrigatórios.');
       return;
     }
 
@@ -140,7 +166,7 @@ export default function App() {
       tipo, 
       status,
       data_vencimento: dataVencimento || null,
-      dados_pagamento: dadosGamamento => dadosPagamento || null,
+      dados_pagamento: dadosPagamento || null,
       user_id: session.user.id 
     };
 
@@ -172,7 +198,6 @@ export default function App() {
     }
   }
 
-  // Execução real da exclusão no Banco de Dados
   async function ejecutarExclusao() {
     if (!idExclusaoConfirmar) return;
 
@@ -194,10 +219,7 @@ export default function App() {
     setEditandoId(t.id);
     setData(t.data);
     setDescricao(t.descricao);
-    
-    // Carrega o valor convertendo o número do banco direto para o formato de máscara
     setValorMascara(t.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-    
     setCategoria(t.categoria);
     setTipo(t.tipo);
     setStatus(t.status);
@@ -220,7 +242,6 @@ export default function App() {
     setIsModalAberto(false);
   }
 
-  // Verificação de vencimento para alertas visuais
   function verificarStatusVencimento(dataVenc, statusAtual) {
     if (!dataVenc || statusAtual === 'Pago') return null;
     
@@ -239,34 +260,31 @@ export default function App() {
     return null;
   }
 
-  // Geração dinâmica de categorias para o filtro
   const categoriasUnicas = [...new Set(transacoes.map(t => t.categoria))].filter(Boolean);
 
-  // Lógica de filtragem acumulada
+  // Lógica de filtragem acumulada com a nova Competência Automatizada
   const transacoesFiltradas = transacoes.filter(t => {
     const bateTexto = 
       t.descricao.toLowerCase().includes(buscaTexto.toLowerCase()) ||
       t.categoria.toLowerCase().includes(buscaTexto.toLowerCase());
     
-    const bateMes = !filtroMes || t.data.split('-')[1] === filtroMes;
+    // Filtra pelo ano-mês exato da data (primeiros 7 caracteres: YYYY-MM)
+    const bateCompetencia = !filtroCompetencia || t.data.substring(0, 7) === filtroCompetencia;
     const bateCategoria = !filtroCategoria || t.categoria.toLowerCase() === filtroCategoria.toLowerCase();
     const bateStatus = !filtroStatus || t.status === filtroStatus;
 
-    return bateTexto && bateMes && bateCategoria && bateStatus;
+    return bateTexto && bateCompetencia && bateCategoria && bateStatus;
   });
 
-  // Lógica da paginação
   const totalPaginas = Math.ceil(transacoesFiltradas.length / itensPorPagina) || 1;
   const indiceUltimoItem = paginaAtual * itensPorPagina;
   const indicePrimeiroItem = indiceUltimoItem - itensPorPagina;
   const transacoesPaginadas = transacoesFiltradas.slice(indicePrimeiroItem, indiceUltimoItem);
 
-  // Totais dinâmicos
   const totalEntradas = transacoesFiltradas.filter(t => t.tipo === 'Entrada').reduce((acc, curr) => acc + curr.valor, 0);
   const totalSaidas = transacoesFiltradas.filter(t => t.tipo === 'Saída').reduce((acc, curr) => acc + curr.valor, 0);
   const saldoAtual = totalEntradas - totalSaidas;
 
-  // Exportação para PDF
   function exportarPDF() {
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold").setFontSize(20);
@@ -278,7 +296,7 @@ export default function App() {
     doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(0);
     doc.text("Filtros Ativos na Exportação:", 14, 38);
     doc.setFont("helvetica", "normal").setTextColor(100);
-    doc.text(`Busca: ${buscaTexto || "Nenhum"}  |  Mês: ${filtroMes || "Todos"}  |  Categoria: ${filtroCategoria || "Todas"}  |  Status: ${filtroStatus || "Todos"}`, 14, 44);
+    doc.text(`Busca: ${buscaTexto || "Nenhum"}  |  Competência: ${formatarCompetenciaTexto(filtroCompetencia)}  |  Categoria: ${filtroCategoria || "Todas"}  |  Status: ${filtroStatus || "Todos"}`, 14, 44);
 
     doc.setFillColor(248, 249, 250);
     doc.rect(14, 50, 182, 22, "F");
@@ -308,7 +326,7 @@ export default function App() {
 
     autoTable(doc, {
       head: [colunas],
-      body: lines => linhas,
+      body: linhas,
       startY: 80,
       theme: 'striped',
       headStyles: { fillColor: [59, 130, 246], fontStyle: 'bold' },
@@ -329,7 +347,6 @@ export default function App() {
     toast.success('Relatório PDF exportado!');
   }
 
-  // --- RENDER DA TELA DE LOGIN ---
   if (!session) {
     return (
       <div className="min-h-screen bg-[#f2f2f7] flex items-center justify-center p-4 text-neutral-900">
@@ -359,7 +376,6 @@ export default function App() {
     );
   }
 
-  // --- RENDER DA TELA PRINCIPAL ---
   return (
     <div className="min-h-screen bg-[#f2f2f7] text-neutral-900 pb-8">
       <Toaster position="bottom-right" reverseOrder={false} />
@@ -377,7 +393,9 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-4 space-y-4">
-        {/* CARDS DE MONTANTE */}
+        
+
+        {/* CARDS DE MONTANTE (Zera ou soma com base na competência atual) */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-white p-4 rounded-2xl border flex items-center justify-between shadow-sm border-gray-200/60">
             <div><p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Entradas</p><h3 className="text-lg font-bold text-green-600">R$ {totalEntradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3></div>
@@ -388,21 +406,14 @@ export default function App() {
             <ArrowDownCircle className="w-5 h-5 text-red-500" />
           </div>
           <div className="bg-white p-4 rounded-2xl border flex items-center justify-between shadow-sm border-gray-200/60">
-            <div><p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Saldo Geral</p><h3 className={`text-lg font-bold ${saldoAtual >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3></div>
+            <div><p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Saldo do Período</p><h3 className={`text-lg font-bold ${saldoAtual >= 0 ? 'text-blue-600' : 'text-orange-500'}`}>R$ {saldoAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3></div>
             <Wallet className={`w-5 h-5 ${saldoAtual >= 0 ? 'text-blue-500' : 'text-orange-500'}`} />
           </div>
         </section>
 
-        {/* CENTRAL DE FILTROS */}
-        <section className="bg-white p-3 rounded-2xl border border-gray-200/60 grid grid-cols-1 sm:grid-cols-4 gap-2.5 shadow-sm">
+        {/* CENTRAL DE FILTROS REESTRUTURADA (3 COLUNAS) */}
+        <section className="bg-white p-3 rounded-2xl border border-gray-200/60 grid grid-cols-1 sm:grid-cols-3 gap-2.5 shadow-sm">
           <input type="text" placeholder="Buscar descrição..." className="bg-neutral-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 focus:bg-white transition-all text-neutral-700" value={buscaTexto} onChange={(e) => { setBuscaTexto(e.target.value); setPaginaAtual(1); }} />
-          <select className="bg-neutral-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-neutral-700 focus:outline-none focus:border-blue-500 focus:bg-white transition-all" value={filtroMes} onChange={(e) => { setFiltroMes(e.target.value); setPaginaAtual(1); }}>
-            <option value="">Todos os Meses</option>
-            <option value="01">Janeiro</option><option value="02">Fevereiro</option><option value="03">Março</option>
-            <option value="04">Abril</option><option value="05">Maio</option><option value="06">Junho</option>
-            <option value="07">Julho</option><option value="08">Agosto</option><option value="09">Setembro</option>
-            <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-          </select>
           <select className="bg-neutral-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-neutral-700 focus:outline-none focus:border-blue-500 focus:bg-white transition-all" value={filtroCategoria} onChange={(e) => { setFiltroCategoria(e.target.value); setPaginaAtual(1); }}>
             <option value="">Todas Categorias</option>
             {categoriasUnicas.map((c, i) => <option key={i} value={c}>{c}</option>)}
@@ -414,6 +425,49 @@ export default function App() {
           </select>
         </section>
 
+        {/* BARRA DE CONTROLE DE COMPETÊNCIA AUTOMATIZADO */}
+        <section className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-2xl border border-gray-200/60 shadow-sm gap-3">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-50 p-2 rounded-xl text-blue-500 border border-blue-100 hidden sm:block">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button 
+                onClick={() => alterarCompetencia(-1)} 
+                className="p-1.5 bg-neutral-50 hover:bg-neutral-100 rounded-xl border border-gray-200/40 transition-all active:scale-95 text-neutral-600"
+                title="Mês Anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-bold text-neutral-700 min-w-[150px] text-center bg-neutral-50 px-3 py-1.5 rounded-xl border border-gray-200/30">
+                {formatarCompetenciaTexto(filtroCompetencia)}
+              </span>
+              <button 
+                onClick={() => alterarCompetencia(1)} 
+                className="p-1.5 bg-neutral-50 hover:bg-neutral-100 rounded-xl border border-gray-200/40 transition-all active:scale-95 text-neutral-600"
+                title="Próximo Mês"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => {
+              if (filtroCompetencia) {
+                setFiltroCompetencia(''); // Limpa para ver tudo
+              } else {
+                const hoje = new Date();
+                setFiltroCompetencia(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`);
+              }
+              setPaginaAtual(1);
+            }}
+            className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all active:scale-[0.98] ${!filtroCompetencia ? 'bg-blue-50 text-blue-600 border-blue-200 shadow-sm' : 'bg-neutral-50 text-neutral-600 border-gray-200/80 hover:bg-neutral-100'}`}
+          >
+            {!filtroCompetencia ? 'Voltar para Visão Mensal' : 'Ver Histórico Completo'}
+          </button>
+        </section>
+        
         {/* TABELA DE LANÇAMENTOS OU EMPTY STATE */}
         <section className="bg-white rounded-2xl border border-gray-200/60 overflow-hidden shadow-sm w-full">
           <div className="p-4 border-b border-gray-100 flex justify-between items-center gap-2">
@@ -428,7 +482,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* UX: Tratamento de Estado Vazio (Empty State) com Tailwind */}
           {transacoesPaginadas.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center bg-white">
               <div className="p-4 bg-neutral-50 rounded-2xl border border-gray-100 mb-3 text-neutral-400">
@@ -436,13 +489,13 @@ export default function App() {
               </div>
               <h3 className="text-sm font-bold text-neutral-700">Nenhum lançamento por aqui</h3>
               <p className="text-xs text-neutral-400 mt-1 max-w-sm font-medium leading-relaxed">
-                Não encontramos transações cadastradas ou correspondentes aos filtros ativos. Que tal registrar sua primeira movimentação?
+                Não encontramos transações cadastradas ou correspondentes aos filtros ativos neste período. Que tal registrar uma movimentação?
               </p>
               <button 
                 onClick={() => setIsModalAberto(true)} 
                 className="mt-4 flex items-center gap-1 bg-blue-500 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors shadow-sm active:scale-95"
               >
-                <PlusCircle className="w-3.5 h-3.5" /> Cadastrar primeira transação
+                <PlusCircle className="w-3.5 h-3.5" /> Cadastrar transação
               </button>
             </div>
           ) : (
@@ -508,7 +561,6 @@ export default function App() {
                 </table>
               </div>
 
-              {/* CONTROLO DE PAGINAÇÃO */}
               <div className="p-3 bg-neutral-50 border-t border-gray-100 flex items-center justify-between text-neutral-500 text-xs">
                 <span>Página <b>{paginaAtual}</b> de {totalPaginas}</span>
                 <div className="flex items-center gap-1">
@@ -557,7 +609,6 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  {/* UX: Input de valor alterado para type="text" suportando a máscara em tempo real */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">Valor</label>
                     <input 
