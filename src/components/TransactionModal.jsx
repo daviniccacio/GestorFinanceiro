@@ -20,7 +20,7 @@ export default function TransactionModal({ editandoId, limparFormulario, salvarL
             <PlusCircle className="w-4 h-4 text-blue-500" />
             {editandoId ? 'Editar Lançamento' : 'Novo Lançamento'}
           </h2>
-          <button onClick={limparFormulario} className="text-neutral-400 hover:text-neutral-600 transition-colors">
+          <button type="button" onClick={limparFormulario} className="text-neutral-400 hover:text-neutral-600 transition-colors">
             <XCircle className="w-5 h-5" />
           </button>
         </div>

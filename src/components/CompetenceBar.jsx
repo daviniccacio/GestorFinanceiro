@@ -40,7 +40,7 @@ export default function CompetenceBar({ filtroCompetencia, setFiltroCompetencia,
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-xs font-bold text-neutral-700 min-w-[150px] text-center bg-neutral-50 px-3 py-1.5 rounded-xl border border-gray-200/30">
+          <span className="text-xs font-bold text-neutral-700 min-w-37.5 text-center bg-neutral-50 px-3 py-1.5 rounded-xl border border-gray-200/30">
             {formatarCompetenciaTexto(filtroCompetencia)}
           </span>
           <button 

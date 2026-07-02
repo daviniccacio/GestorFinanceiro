@@ -1,6 +1,22 @@
 import { ArrowUpCircle, ArrowDownCircle, Wallet } from 'lucide-react';
 
-export default function SummaryCards({ totalEntradas, totalSaidas, saldoAtual }) {
+export default function SummaryCards({ carregando, totalEntradas, totalSaidas, saldoAtual }) {
+  
+  // ADICIONADO: Retorno do Skeleton se estiver carregando
+  if (carregando) {
+    return (
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="bg-white p-4 rounded-2xl border flex flex-col justify-center gap-2 shadow-sm border-gray-200/60 animate-pulse h-19.5">
+            <div className="h-3 bg-neutral-200 rounded w-1/4"></div>
+            <div className="h-5 bg-neutral-300 rounded w-1/2"></div>
+          </div>
+        ))}
+      </section>
+    );
+  }
+
+  // TODO O RESTANTE CONTINUA EXATAMENTE IGUAL
   return (
     <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div className="bg-white p-4 rounded-2xl border flex items-center justify-between shadow-sm border-gray-200/60">
