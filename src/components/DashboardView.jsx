@@ -1,5 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import SummaryCards from './SummaryCards';
+import AlertsPanel from './AlertsPanel'; // IMPORTAÇÃO DO NOVO COMPONENTE
+import BudgetPanel from './BudgetPanel';
 
 export default function DashboardView({ totalEntradas, totalSaidas, saldoAtual, transacoesFiltradas }) {
   
@@ -30,14 +32,19 @@ export default function DashboardView({ totalEntradas, totalSaidas, saldoAtual, 
     <div className="space-y-4">
       <SummaryCards totalEntradas={totalEntradas} totalSaidas={totalSaidas} saldoAtual={saldoAtual} />
 
+      {/* NOVO PAINEL INSERIDO AQUI PARA DAR DESTAQUE ANTES DOS GRÁFICOS */}
+      <AlertsPanel transacoes={transacoesFiltradas} />
+
+      <BudgetPanel transacoes={transacoesFiltradas} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
         {/* Gráfico 1: Fluxo de Caixa */}
         <div className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-200/60 dark:border-zinc-800 shadow-xs flex flex-col justify-between transition-colors duration-200">
           <h3 className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-4">Fluxo de Caixa Geral</h3>
           
-          {/* Injetado seletores utilitários v4 para customizar os Tooltips injetados nativamente pelo Recharts */}
-          <div className="h-60 w-full text-[10px] font-semibold text-gray-400 dark:text-zinc-500 [&_.recharts-default-tooltip]:!bg-white [&_.recharts-default-tooltip]:dark:!bg-zinc-800 [&_.recharts-default-tooltip]:!border-gray-200 [&_.recharts-default-tooltip]:dark:!border-zinc-700 [&_.recharts-default-tooltip_*]:!text-gray-900 [&_.recharts-default-tooltip_*]:dark:!text-zinc-100">
+          {/* Correção aplicada: As diretivas de importância '!' mudaram para o final de cada classe utilitária */}
+          <div className="h-60 w-full text-[10px] font-semibold text-gray-400 dark:text-zinc-500 [&_.recharts-default-tooltip]:bg-white! [&_.recharts-default-tooltip]:dark:bg-zinc-800! [&_.recharts-default-tooltip]:border-gray-200! [&_.recharts-default-tooltip]:dark:border-zinc-700! [&_.recharts-default-tooltip_*]:text-gray-900! [&_.recharts-default-tooltip_*]:dark:text-zinc-100!">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dadosFluxo} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-slate-100 dark:text-zinc-800/80" />
@@ -57,7 +64,9 @@ export default function DashboardView({ totalEntradas, totalSaidas, saldoAtual, 
         {/* Gráfico 2: Despesas por Categoria */}
         <div className="bg-white dark:bg-zinc-900 p-5 rounded-3xl border border-gray-200/60 dark:border-zinc-800 shadow-xs flex flex-col justify-between transition-colors duration-200">
           <h3 className="text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider mb-4">Despesas por Categoria</h3>
-          <div className="h-60 w-full flex items-center justify-center [&_.recharts-default-tooltip]:!bg-white [&_.recharts-default-tooltip]:dark:!bg-zinc-800 [&_.recharts-default-tooltip]:!border-gray-200 [&_.recharts-default-tooltip]:dark:!border-zinc-700 [&_.recharts-default-tooltip_*]:!text-gray-900 [&_.recharts-default-tooltip_*]:dark:!text-zinc-100">
+          
+          {/* Correção aplicada: As diretivas de importância '!' mudaram para o final de cada classe utilitária */}
+          <div className="h-60 w-full flex items-center justify-center [&_.recharts-default-tooltip]:bg-white! [&_.recharts-default-tooltip]:dark:bg-zinc-800! [&_.recharts-default-tooltip]:border-gray-200! [&_.recharts-default-tooltip]:dark:border-zinc-700! [&_.recharts-default-tooltip_*]:text-gray-900! [&_.recharts-default-tooltip_*]:dark:text-zinc-100!">
             {despesasPorCategoria.length === 0 ? (
               <span className="text-xs font-medium text-gray-400 dark:text-zinc-500">Nenhum gasto registrado neste período.</span>
             ) : (
