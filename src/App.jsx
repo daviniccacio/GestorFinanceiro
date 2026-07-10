@@ -5,17 +5,15 @@ import autoTable from 'jspdf-autotable';
 import toast, { Toaster } from 'react-hot-toast';
 import { Wallet, Eye, EyeOff, Plus } from 'lucide-react';
 
-// IMPORTAÇÃO DOS COMPONENTES REFATORADOS
 import CompetenceBar from './components/CompetenceBar';
 import FilterCenter from './components/FilterCenter';
 import TransactionTable from './components/TransactionTable';
 import TransactionModal from './components/TransactionModal';
 import DeleteModal from './components/DeleteModal';
 import AuthRecovery from './components/AuthRecovery';
-
-// NOVOS COMPONENTES DA NAVEGAÇÃO INTERNA
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
+import { traduzirErroSupabase, validarCamposAuth } from './utils/AuthHelpers';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -119,53 +117,88 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
+  // 1. LOGIN BLINDADO
   async function lidarComLogin(e) {
     e.preventDefault();
+
+    // Validação local rápida (passamos false para não exigir regra de número no login)
+    const validacao = validarCamposAuth(email, password, false);
+    if (!validacao.valido) {
+      toast.error(validacao.mensagem);
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) toast.error('E-mail ou senha incorretos.');
-    else toast.success('Bem-vindo de volta!');
+    if (error) {
+      toast.error(traduzirErroSupabase(error));
+    } else {
+      toast.success('Bem-vindo de volta!');
+    }
   }
 
-  // NOVA FUNÇÃO: Lida com a criação de novas contas
+  // 2. CADASTRO COM BARREIRA DE SEGURANÇA
   async function lidarComCadastro(e) {
     e.preventDefault();
+
+    // Validação rígida de senha forte antes de enviar para a nuvem
+    const validacao = validarCamposAuth(email, password, true);
+    if (!validacao.valido) {
+      toast.error(validacao.mensagem);
+      return;
+    }
+
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
 
+      // Segurança extra do Supabase: impede vazamento de contas existentes
       if (data?.user && data?.user?.identities?.length === 0) {
-        toast.error('Este e-mail já está cadastrado.');
+        toast.error('Este e-mail já está cadastrado no sistema.');
         return;
       }
 
       toast.success('Cadastro realizado! Verifique seu e-mail de confirmação.');
-      setViewAuth('login'); // Retorna para a visão de login
+      setViewAuth('login');
     } catch (error) {
-      toast.error(`Erro ao cadastrar: ${error.message}`);
+      toast.error(`Erro ao cadastrar: ${traduzirErroSupabase(error)}`);
     }
   }
 
-  // LÓGICA SUPABASE: Enviar link de redefinição para o e-mail informado
+  // 3. RECUPERAÇÃO DE E-MAIL TRATADA
   async function lidarComSolicitacaoEmail({ email: emailRecuperacao }, setCarregando) {
+    if (!emailRecuperacao || !emailRecuperacao.includes('@')) {
+      toast.error('Por favor, insira um e-mail válido.');
+      setCarregando(false);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(emailRecuperacao, {
-        redirectTo: window.location.origin, // Retorna para a raiz da aplicação (local ou prod)
+        redirectTo: window.location.origin, // Garante redirecionamento perfeito em local ou prod
       });
       if (error) throw error;
 
       toast.success('Link de recuperação enviado! Verifique sua caixa de entrada.');
       setViewAuth('login');
     } catch (error) {
-      toast.error(error.message || 'Erro ao enviar e-mail de recuperação.');
+      toast.error(traduzirErroSupabase(error));
     } finally {
       setCarregando(false);
     }
   }
 
-  // LÓGICA SUPABASE: Gravar a nova senha na nuvem
+  // 4. GRAVAÇÃO DA NOVA SENHA SEGURA
   async function lidarComNovaSenha({ novaSenha, confirmarSenha }, setCarregando) {
     if (novaSenha !== confirmarSenha) {
-      toast.error('As senhas não coincidem!');
+      toast.error('As senhas digitadas não coincidem!');
+      setCarregando(false);
+      return;
+    }
+
+    // Validação local de força de senha para a nova credencial
+    const validacao = validarCamposAuth(email, novaSenha, true);
+    if (!validacao.valido) {
+      toast.error(validacao.mensagem);
       setCarregando(false);
       return;
     }
@@ -174,16 +207,15 @@ export default function App() {
       const { error } = await supabase.auth.updateUser({ password: novaSenha });
       if (error) throw error;
 
-      toast.success('Sua senha foi redefinida! Faça login novamente.');
-      await supabase.auth.signOut(); // Limpa as sessões temporárias
+      toast.success('Sua senha foi redefinida com sucesso! Faça login novamente.');
+      await supabase.auth.signOut();
       setViewAuth('login');
     } catch (error) {
-      toast.error(error.message || 'Erro ao redefinir sua senha.');
+      toast.error(traduzirErroSupabase(error));
     } finally {
       setCarregando(false);
     }
   }
-
   async function lidarComLogout() {
     await supabase.auth.signOut();
     setTransacoes([]);

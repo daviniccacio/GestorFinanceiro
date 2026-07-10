@@ -31,6 +31,7 @@ Thumbs.db
 *.swp
 
 .repomix-output.xml
+.repomixignore
 *.xml
 
 todo.md
