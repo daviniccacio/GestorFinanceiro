@@ -11,7 +11,7 @@ Um sistema web completo, moderno e responsivo para controlo e planeamento financ
 * **🗓️ Filtro por Competência & Centro de Pesquisa:** Navegação fácil entre meses e anos, além de um sistema de filtragem avançado por descrição, categorias e status de pagamento.
 * **💼 CRUD de Transações:** Registo, edição, listagem e exclusão de movimentações com suporte a máscaras monetárias padrão `pt-BR`, diferenciação de tipos (Entrada/Saída), anexação opcional de dados de pagamento (Pix, Conta, Banco) e datas de vencimento.
 * **⚠️ Painel Inteligente de Alertas:** Identificação automática de contas em atraso ou próximas da data de vencimento com mudança de cor dinâmica com base no status (Vencida ou Em Aberto).
-* **🎯 Controlo de Orçamentos e Metas:** Definição de limites de gastos mensais por categorias específicas e acompanhamento do progresso através de barras visuais com alertas de teto máximo atingido.
+* **🎯 Controle de Orçamentos e Metas:** Definição de limites de gastos mensais por categorias específicas e acompanhamento do progresso através de barras visuais com alertas de teto máximo atingido.
 * **📄 Exportação de Relatórios:** Geração instantânea e download de relatórios estruturados em formato PDF recorrendo ao `jsPDF` e `jspdf-autotable`.
 * **🌓 Suporte a Dark Mode:** Interface totalmente adaptada tanto para o tema claro como para o tema escuro.
 
