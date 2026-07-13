@@ -15,6 +15,20 @@ import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
 import { traduzirErroSupabase, validarCamposAuth } from './utils/AuthHelpers';
 
+// Adicione esta função bem aqui (antes do export default function App)
+function parseMascaraParaNumero(valor) {
+  if (!valor) return 0;
+  if (typeof valor === 'number') return valor;
+
+  // Remove o "R$", remove os pontos de milhar e substitui a vírgula decimal por ponto
+  const valorLimpo = valor
+    .replace(/R\$\s?/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+
+  return parseFloat(valorLimpo);
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [email, setEmail] = useState('');
@@ -79,6 +93,10 @@ export default function App() {
   const [data, setData] = useState(new Date().toISOString().split('T')[0]);
   const [dataVencimento, setDataVencimento] = useState('');
   const [dadosPagamento, setDadosPagamento] = useState('');
+  const [repetir, setRepetir] = useState(false);
+  const [tipoRepeticao, setTipoRepeticao] = useState('fixo'); // 'fixo' | 'parcelado'
+  const [numeroParcelas, setNumeroParcelas] = useState(2);
+  const [grupoId, setGrupoId] = useState(null);
 
   async function buscarTransacoes() {
     try {
@@ -226,28 +244,158 @@ export default function App() {
 
   async function salvarLancamento(e) {
     e.preventDefault();
-    const valorFloat = Number(valorMascara.replace(/\D/g, '')) / 100;
 
-    if (!descricao || valorFloat <= 0 || !categoria) {
-      toast.error('Por favor, preencha os campos obrigatórios.');
+    if (!descricao || !valorMascara || !data) {
+      alert('Por favor, preencha os campos obrigatórios (Descrição, Valor e Data).');
       return;
     }
 
-    const dadosLancamento = {
-      data, descricao, categoria: categoria.trim(), valor: valorFloat, tipo, status,
-      data_vencimento: dataVencimento || null, dados_pagamento: dadosPagamento || null, user_id: session.user.id
-    };
+    const valorNumerico = parseMascaraParaNumero(valorMascara);
+    if (isNaN(valorNumerico) || valorNumerico <= 0) {
+      alert('Por favor, insira um valor válido maior que zero.');
+      return;
+    }
 
-    const { error } = editandoId
-      ? await supabase.from('transacoes').update(dadosLancamento).eq('id', editandoId)
-      : await supabase.from('transacoes').insert([dadosLancamento]);
+    try {
+      let lotesDeTransacoes = [];
+      const [anoBase, mesBase, diaBase] = data.split('-').map(Number);
 
-    if (error) {
-      toast.error(`Erro ao salvar: ${error.message}`);
-    } else {
-      toast.success(editandoId ? 'Lançamento updated!' : 'Lançamento cadastrado!');
+      const temVencimento = !!dataVencimento;
+      const [anoVencBase, mesVencBase, diaVencBase] = temVencimento
+        ? dataVencimento.split('-').map(Number)
+        : [null, null, null];
+
+      // ─── MODO DE EDIÇÃO ───────────────────────────────────────
+      // ─── MODO DE EDIÇÃO ───────────────────────────────────────
+      if (editandoId) {
+        if (grupoId) {
+          // 1. Atualiza APENAS os campos compartilhados por TODO o grupo (Valor, Categoria, Tipo, Pagamento)
+          // Repare que NÃO atualizamos "data", "data_vencimento" nem "descricao" aqui para não estragar os outros meses!
+          const { error: erroGrupo } = await supabase
+            .from('transacoes')
+            .update({
+              valor: valorNumerico,
+              categoria,
+              tipo,
+              dados_pagamento: dadosPagamento || null
+            })
+            .eq('grupo_id', grupoId);
+
+          if (erroGrupo) throw erroGrupo;
+
+          // 2. Atualiza os campos individuais APENAS desta parcela específica que você está mexendo
+          const { error: erroIndividual } = await supabase
+            .from('transacoes')
+            .update({
+              descricao,
+              status,
+              data, // Altera a data só DESTA linha
+              data_vencimento: dataVencimento || null // Alvera o vencimento só DESTA linha
+            })
+            .eq('id', editandoId);
+
+          if (erroIndividual) throw erroIndividual;
+        } else {
+          // Registro comum sem grupo (avulso) - atualiza tudo normalmente
+          const { error } = await supabase
+            .from('transacoes')
+            .update({
+              user_id: session.user.id,
+              descricao,
+              valor: valorNumerico,
+              categoria,
+              data,
+              tipo,
+              status,
+              data_vencimento: dataVencimento || null,
+              dados_pagamento: dadosPagamento || null
+            })
+            .eq('id', editandoId);
+
+          if (error) throw error;
+        }
+      }
+      // ─── MODO DE INSERÇÃO (NOVO) ──────────────────────────────
+      else {
+        // Geramos um ID de grupo único se o utilizador optou por repetir
+        const novoGrupoId = repetir ? crypto.randomUUID() : null;
+
+        if (!repetir) {
+          lotesDeTransacoes.push({
+            user_id: session.user.id,
+            descricao,
+            valor: valorNumerico,
+            categoria,
+            data,
+            tipo,
+            status,
+            data_vencimento: dataVencimento || null,
+            dados_pagamento: dadosPagamento || null,
+            grupo_id: null
+          });
+        }
+        else if (tipoRepeticao === 'parcelado') {
+          for (let i = 1; i <= numeroParcelas; i++) {
+            const dataParcela = new Date(Date.UTC(anoBase, mesBase - 1 + (i - 1), diaBase));
+            const dataString = dataParcela.toISOString().split('T')[0];
+
+            let vencimentoString = null;
+            if (temVencimento) {
+              const dataVencParcela = new Date(Date.UTC(anoVencBase, mesVencBase - 1 + (i - 1), diaVencBase));
+              vencimentoString = dataVencParcela.toISOString().split('T')[0];
+            }
+
+            lotesDeTransacoes.push({
+              user_id: session.user.id,
+              descricao: `${descricao} (${i}/${numeroParcelas})`,
+              valor: valorNumerico,
+              categoria,
+              data: dataString,
+              tipo,
+              status: i === 1 ? status : 'Pendente',
+              data_vencimento: vencimentoString,
+              dados_pagamento: dadosPagamento || null,
+              grupo_id: novoGrupoId // 🌟 Vincula todas ao mesmo grupo
+            });
+          }
+        }
+        else if (tipoRepeticao === 'fixo') {
+          for (let i = 1; i <= 12; i++) {
+            const dataFixa = new Date(Date.UTC(anoBase, mesBase - 1 + (i - 1), diaBase));
+            const dataString = dataFixa.toISOString().split('T')[0];
+
+            let vencimentoString = null;
+            if (temVencimento) {
+              const dataVencFixa = new Date(Date.UTC(anoVencBase, mesVencBase - 1 + (i - 1), diaVencBase));
+              vencimentoString = dataVencFixa.toISOString().split('T')[0];
+            }
+
+            lotesDeTransacoes.push({
+              user_id: session.user.id,
+              descricao: descricao,
+              valor: valorNumerico,
+              categoria,
+              data: dataString,
+              tipo,
+              status: i === 1 ? status : 'Pendente',
+              data_vencimento: vencimentoString,
+              dados_pagamento: dadosPagamento || null,
+              grupo_id: novoGrupoId // 🌟 Vincula todas ao mesmo grupo
+            });
+          }
+        }
+
+        const { error } = await supabase.from('transacoes').insert(lotesDeTransacoes);
+        if (error) throw error;
+      }
+
       limparFormulario();
+      setIsModalAberto(false);
       buscarTransacoes();
+      toast.success('Lançamento guardado com sucesso!');
+    } catch (err) {
+      console.error('Erro ao guardar lançamento:', err);
+      alert('Erro ao guardar as informações na base de dados.');
     }
   }
 
@@ -269,6 +417,7 @@ export default function App() {
 
   function prepararEdicao(t) {
     setEditandoId(t.id);
+    setGrupoId(t.grupo_id || null); // 🌟 Guarda o ID do grupo, se existir
     setData(t.data);
     setDescricao(t.descricao);
     setValorMascara(t.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
@@ -281,9 +430,12 @@ export default function App() {
   }
 
   function limparFormulario() {
-    setEditandoId(null); setDescricao(''); setValorMascara(''); setCategoria('');
+    setEditandoId(null);
+    setGrupoId(null); // 🌟 Limpa o grupo
+    setDescricao(''); setValorMascara(''); setCategoria('');
     setData(new Date().toISOString().split('T')[0]); setTipo('Saída'); setStatus('Pago');
-    setDataVencimento(''); setDadosPagamento(''); setIsModalAberto(false);
+    setDataVencimento(''); setDadosPagamento(''); setIsModalAberto(false); setRepetir(false);
+    setTipoRepeticao('fixo'); setNumeroParcelas(2);
   }
 
   const categoriasUnicas = [...new Set(transacoes.map(t => t.categoria))].filter(Boolean);
@@ -716,6 +868,12 @@ export default function App() {
           setTipo={setTipo}
           status={status}
           setStatus={setStatus}
+          repetir={repetir}
+          setRepetir={setRepetir}
+          tipoRepeticao={tipoRepeticao}
+          setTipoRepeticao={setTipoRepeticao}
+          numeroParcelas={numeroParcelas}
+          setNumeroParcelas={setNumeroParcelas}
         />
       )}
 
