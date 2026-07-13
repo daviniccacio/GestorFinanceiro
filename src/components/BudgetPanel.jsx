@@ -1,18 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabaseClient';
 import toast from 'react-hot-toast';
 import { Target, AlertCircle, CheckCircle2, Pencil, Check, X, Plus, Trash2, Loader2, Wallet } from 'lucide-react';
 
-/**
- * Componente BudgetPanel
- * Gerencia Orçamentos (mensais) e Metas (acumuladas por Saídas históricas).
- */
 export default function BudgetPanel({ transacoes = [] }) {
   const [limites, setLimites] = useState({});
-  const [historicoMetas, setHistoricoMetas] = useState({}); // Guarda o total acumulado histórico das metas
+  const [historicoMetas, setHistoricoMetas] = useState({});
   const [carregandoMetas, setCarregandoMetas] = useState(true);
   const [userId, setUserId] = useState(null);
-
   // Estados de controle para Edição e Criação
   const [categoriaEmEdicao, setCategoriaEmEdicao] = useState(null);
   const [valorTemporario, setValorTemporario] = useState('');
@@ -34,8 +29,8 @@ export default function BudgetPanel({ transacoes = [] }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Buscar as configurações do banco (SEM valores padrão fixos para evitar o bug de reaparecer)
-  const carregarDadosDasMetas = async () => {
+  // 2. Buscar as configurações do banco (Memorizada com useCallback)
+  const carregarDadosDasMetas = useCallback(async () => {
     if (!userId) return;
     try {
       setCarregandoMetas(true);
@@ -64,10 +59,10 @@ export default function BudgetPanel({ transacoes = [] }) {
     } finally {
       setCarregandoMetas(false);
     }
-  };
+  }, [userId]);
 
-  // 3. Buscar histórico total (de todos os tempos) para acumular as "Saídas" das Metas
-  const carregarHistoricoGeral = async () => {
+  // 3. Buscar histórico total para acumular as "Saídas" das Metas (Memorizada com useCallback)
+  const carregarHistoricoGeral = useCallback(async () => {
     if (!userId) return;
     try {
       const { data, error } = await supabase
@@ -93,14 +88,19 @@ export default function BudgetPanel({ transacoes = [] }) {
     } catch (error) {
       console.error('Erro ao calcular histórico:', error);
     }
-  };
+  }, [userId]);
 
+  // Efeito responsável por disparar a carga inicial sem travar a renderização síncrona
   useEffect(() => {
     if (userId) {
-      carregarDadosDasMetas();
-      carregarHistoricoGeral();
+      const timer = setTimeout(() => {
+        carregarDadosDasMetas();
+        carregarHistoricoGeral();
+      }, 0);
+      
+      return () => clearTimeout(timer);
     }
-  }, [userId]);
+  }, [userId, carregarDadosDasMetas, carregarHistoricoGeral]);
 
   // 4. Salvar/Atualizar uma meta ou orçamento existente
   const salvarLimite = async (categoria) => {
@@ -129,7 +129,7 @@ export default function BudgetPanel({ transacoes = [] }) {
         [categoria]: { ...prev[categoria], limite: valorNumerico }
       }));
       setCategoriaEmEdicao(null);
-      toast.success('Valor atualizado com sucesso!');
+      toast.success('Valor updated com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar:', error);
       toast.error('Erro ao salvar no banco.');
@@ -172,7 +172,7 @@ export default function BudgetPanel({ transacoes = [] }) {
     }
   };
 
-  // 6. Remover definitivamente (Cura o bug de reaparecer ao recarregar)
+  // 6. Remover definitivamente 
   const removerMeta = async (categoria) => {
     try {
       const { error } = await supabase
@@ -271,7 +271,7 @@ export default function BudgetPanel({ transacoes = [] }) {
           const itemConfig = limites[categoria];
           const ehMeta = itemConfig.tipo === 'meta';
           
-          // Seleção da origem do cálculo baseado no tipo escolhido
+          // Quantidade de progresso baseada no tipo escolhido
           const valorProgresso = ehMeta ? (historicoMetas[categoria] || 0) : (gastosMesPorCategoria[categoria] || 0);
           const limiteDefinido = itemConfig.limite;
           const isEditing = categoriaEmEdicao === categoria;

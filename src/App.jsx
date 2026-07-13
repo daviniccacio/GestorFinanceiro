@@ -99,13 +99,17 @@ export default function App() {
   const [numeroParcelas, setNumeroParcelas] = useState(2);
   const [grupoId, setGrupoId] = useState(null);
 
-  async function buscarTransacoes() {
+  async function buscarTransacoes(sessaoAtual) {
+    // Usa a sessão passada por argumento ou cai de volta para o estado global
+    const s = sessaoAtual || session;
+    if (!s?.user?.id) return;
+
     try {
       setCarregando(true);
       const { data: dados, error } = await supabase
         .from('transacoes')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', s.user.id)
         .order('data', { ascending: false });
       if (error) throw error;
       setTransacoes(dados || []);
@@ -118,11 +122,21 @@ export default function App() {
   }
 
   // OUVINTE DE ESTADO DE AUTENTICAÇÃO ROBUSTO
+  // 🔄 OUVINTE DE ESTADO DE AUTENTICAÇÃO ATUALIZADO (SEM RENDER EM CASCATA)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    // Busca a sessão inicial e já dispara a busca se o usuário estiver logado
+    supabase.auth.getSession().then(({ data: { session: sessaoInicial } }) => {
+      setSession(sessaoInicial);
+      if (sessaoInicial) buscarTransacoes(sessaoInicial);
+    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
+    // Monitora mudanças de login/logout em tempo real
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, sessaoNova) => {
+      setSession(sessaoNova);
+
+      if (sessaoNova) {
+        buscarTransacoes(sessaoNova);
+      }
 
       // Intercepta se o usuário clicou no link de redefinição enviado por e-mail
       if (event === 'PASSWORD_RECOVERY') {
@@ -131,12 +145,10 @@ export default function App() {
     });
 
     return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (session) buscarTransacoes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  // 🗑️ O SEGUNDO USEEFFECT QUE ESTAVA AQUI FOI REMOVIDO DAQUI POR COMPLETO!
 
   // 1. LOGIN BLINDADO
   async function lidarComLogin(e) {
