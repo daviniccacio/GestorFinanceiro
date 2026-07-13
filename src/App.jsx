@@ -69,6 +69,8 @@ export default function App() {
     return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
   });
 
+  const [filtroPeriodo, setFiltroPeriodo] = useState('mensal'); // 'mensal', '3meses', 'ano', 'tudo'
+
   const [descricao, setDescricao] = useState('');
   const [valorMascara, setValorMascara] = useState('');
   const [categoria, setCategoria] = useState('');
@@ -286,12 +288,46 @@ export default function App() {
 
   const categoriasUnicas = [...new Set(transacoes.map(t => t.categoria))].filter(Boolean);
 
-  const transacoesFiltradas = transacoes.filter(t => {
-    const bateTexto = t.descricao.toLowerCase().includes(buscaTexto.toLowerCase()) || t.categoria.toLowerCase().includes(buscaTexto.toLowerCase());
-    const bateCompetencia = !filtroCompetencia || t.data.substring(0, 7) === filtroCompetencia;
-    const bateCategoria = !filtroCategoria || t.categoria.toLowerCase() === filtroCategoria.toLowerCase();
+  const transacoesFiltradas = transacoes.filter((t) => {
+    // --- 1. FILTRO DE TEMPO AVANÇADO ---
+    if (filtroPeriodo === 'mensal' && filtroCompetencia) {
+      const [anoFiltro, mesFiltro] = filtroCompetencia.split('-');
+      const dataTransacao = new Date(t.data);
+
+      // ✨ CORREÇÃO AQUI: Mudamos para UTC para ignorar o fuso horário do navegador
+      const anoT = dataTransacao.getUTCFullYear();
+      const mesT = dataTransacao.getUTCMonth() + 1;
+
+      if (anoT !== Number(anoFiltro) || mesT !== Number(mesFiltro)) return false;
+    }
+    else if (filtroPeriodo === '3meses') {
+      const dataTransacao = new Date(t.data);
+      const hoje = new Date();
+      const tresMesesAtras = new Date();
+      tresMesesAtras.setMonth(hoje.getMonth() - 3);
+      if (dataTransacao < tresMesesAtras || dataTransacao > hoje) return false;
+    }
+    else if (filtroPeriodo === 'ano') {
+      const dataTransacao = new Date(t.data);
+      const anoAtual = new Date().getFullYear();
+      // ✨ CORREÇÃO AQUI TAMBÉM: Garante o ano correto em UTC
+      if (dataTransacao.getUTCFullYear() !== anoAtual) return false;
+    }
+
+    // --- 2. FILTRO DE CATEGORIA ---
+    if (filtroCategoria && t.categoria !== filtroCategoria) {
+      return false;
+    }
+
+    // --- 3. FILTROS REMANESCENTES ---
+    const texto = buscaTexto ? buscaTexto.toLowerCase() : '';
+    const bateTexto = !texto ||
+      (t.descricao && t.descricao.toLowerCase().includes(texto)) ||
+      (t.categoria && t.categoria.toLowerCase().includes(texto));
+
     const bateStatus = !filtroStatus || t.status === filtroStatus;
-    return bateTexto && bateCompetencia && bateCategoria && bateStatus;
+
+    return bateTexto && bateStatus;
   });
 
   const totalPaginas = Math.ceil(transacoesFiltradas.length / itensPorPagina) || 1;
@@ -616,6 +652,10 @@ export default function App() {
         <CompetenceBar
           filtroCompetencia={filtroCompetencia}
           setFiltroCompetencia={setFiltroCompetencia}
+          filtroPeriodo={filtroPeriodo}
+          setFiltroPeriodo={setFiltroPeriodo}
+          filtroCategoria={filtroCategoria}
+          setFiltroCategoria={setFiltroCategoria}
           setPaginaAtual={setPaginaAtual}
         />
 
